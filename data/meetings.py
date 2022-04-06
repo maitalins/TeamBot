@@ -1,7 +1,7 @@
 import sqlalchemy
 from sqlalchemy import orm
 
-from db_session import SqlAlchemyBase
+from .db_session import SqlAlchemyBase
 
 
 class Meetings(SqlAlchemyBase):
@@ -11,4 +11,5 @@ class Meetings(SqlAlchemyBase):
     id_first = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('staff.id'))
     id_second = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('staff.id'))
 
-    usr_staff = orm.relationship('Staff')
+    first = orm.relationship("Staff", foreign_keys=[id_first])
+    second = orm.relationship("Staff", foreign_keys=[id_second])

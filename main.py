@@ -12,7 +12,7 @@ from data import db_session
 from data.company import Company
 from data.meetings import Meetings
 from data.staff import Staff
-from secret import token, database
+from secret import token
 
 bot = Bot(token=token)
 dp = Dispatcher(bot, storage=MemoryStorage())
@@ -145,5 +145,5 @@ def exit_company(message):
 
 
 if __name__ == '__main__':
-    set_default_commands(dp)
+    db_session.global_init("db/teambot.db")
     executor.start_polling(dp, skip_updates=True)
