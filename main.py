@@ -1,7 +1,6 @@
 import logging
 
 import numpy
-import psycopg2
 import secrets
 
 from aiogram import *
@@ -9,6 +8,10 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
 
+from data import db_session
+from data.company import Company
+from data.meetings import Meetings
+from data.staff import Staff
 from secret import token, database
 
 bot = Bot(token=token)
@@ -62,19 +65,10 @@ async def get_name_company(message, state: FSMContext):
     await state.update_data(name_company=message.text.title())
     data = await state.get_data()
     token_company = secrets.token_urlsafe(16)
-    con = psycopg2.connect(
-        database=database['database'],
-        user=database['user'],
-        password=database['password'],
-        host=database['host'],
-        port=database['port']
-    )
-    cur = con.cursor()
-    cur.execute(
-        "INSERT INTO company (name_company, token, hr) "
-        "VALUES (%s, %s, %s)", (data['name_company'], token_company, message.from_user.username))
-    con.commit()
-    con.close()
+    db_sess = db_session.create_session()
+    db_sess.add(Company(name_company=data['name_company'],
+                        token=token_company, hr=message.from_user.username))
+    db_sess.commit()
     await state.finish()
     await message.answer(f'Организация создана\nТокен для приглашения - {token_company}')
 
@@ -96,101 +90,60 @@ async def con_company(message, state: FSMContext):
         return
     await state.update_data(connect=message.text.title())
     data = await state.get_data()
-    con = psycopg2.connect(
-        database=database['database'],
-        user=database['user'],
-        password=database['password'],
-        host=database['host'],
-        port=database['port']
-    )
-    cur = con.cursor()
-    req = cur.execute(
-        "SELECT id, name FROM company WHERE token = %s", (data['connect'],)).fetchone()
+    db_sess = db_session.create_session()
+    req = db_sess.query(Company).filter(Company.token == data['connect']).first()
     if not req is None:
-        cur.execute(
-            "INSERT INTO staff (name, id_company) VALUES (%s, %s)",
-            (message.from_user.username, req[0][0]))
-        con.commit()
+        db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
+        db_sess.commit()
     else:
         await message.reply("Компании с таким токеном не существует, попробуйте ещё раз")
         return
-    con.close()
     await state.finish()
-    await message.answer(f'Вы подключились к компании - {req[0][1]}')
+    await message.answer(f'Вы подключились к компании - {req.name_company}')
 
 
 @dp.message_handler(commands="meet")
 async def meetings(message):
-    con = psycopg2.connect(
-        database=database['database'],
-        user=database['user'],
-        password=database['password'],
-        host=database['host'],
-        port=database['port']
-    )
-    cur = con.cursor()
-    id_1, id_com_1 = first_per = cur.execute("SELECT id, id_company FROM staff WHERE name = %s",
-                                             (message.from_user.username,)).fetchone()
+    db_sess = db_session.create_session()
+    first_per = db_sess.query(Staff).filter(Staff.name == message.from_user.username).first()
+    id_1, id_com_1 = first_per.id, first_per.id_company
     if not first_per is None:
-        second_per = cur.execute("SELECT id"
-                                 "FROM staff WHERE id_company = %s", (id_com_1,)).fetchall()
+        second_per = db_sess.query(Staff).filter(Staff.id_company == id_com_1).all()
         if len(second_per) > 0:
             await message.answer('Секунду я подбираю ##########')
-            meets = cur.execute("SELECT id_first, id_second"
-                                "FROM meetings WHERE "
-                                "id_first = %s or id_second = %s",
-                                (id_1, id_1)).fetchall()
+            meets = db_sess.query(Meetings).filter(Meetings.id_first == id_com_1
+                                                   | Meetings.id_second == id_com_1).all()
             meet_per = numpy.fromiter((i for i in second_per if (i, id_1) not in meets
-                                       and (id_1, i) not in meets and id_1 != i), dtype=int, count=1)
+                                       and (id_1, i) not in meets and id_1 != i), dtype=int, count=1)  # как проверять на вхождение
             if list(meet_per) is None:
-                meet_per = cur.execute("SELECT id, name FROM staff WHERE id = %s",
-                                       (list(meet_per)[0],)).fetchone()
-                cur.execute(
-                    "INSERT INTO meetings (id_first, id_second) VALUES (%s, %s)",
-                    (id_1, meet_per[0]))
-                con.commit()
-                await message.answer(f'Ваш новый знакомый - {meet_per[1]}')
+                meet_per = db_sess.query(Staff).filter(Staff.id == list(meet_per)[0]).first()
+                db_sess.add(Meetings(id_first=id_1, id_second=meet_per.id))
+                db_sess.commit()
+                await message.answer(f'Ваш новый знакомый - {meet_per.name}')
             else:
                 await message.answer('Вы уже познакомились со всеми')
         else:
             await message.answer('В вашей компании нету сотрудников')
-    con.close()
 
 
 @dp.message_handler(commands="newtoken")
 async def start_state(message):
-    con = psycopg2.connect(
-        database=database['database'],
-        user=database['user'],
-        password=database['password'],
-        host=database['host'],
-        port=database['port']
-    )
-    cur = con.cursor()
+    db_sess = db_session.create_session()
     token_company = secrets.token_urlsafe(16)
-    cur.execute(
-        'UPDATE company set token = %s where hr = %s',
-        (token_company, message.from_user.username))
-    con.commit()
-    con.close()
+    company = db_sess.query(Company).filter(Company.hr == message.from_user.username).first()
+    company.token = token_company
+    db_sess.commit()
     await message.answer(f'Токен обновлен - {token_company}')
 
 
 @dp.message_handler(commands=['exit_company'])
 def exit_company(message):
-    con = psycopg2.connect(
-        database=database['database'],
-        user=database['user'],
-        password=database['password'],
-        host=database['host'],
-        port=database['port']
-    )
-    cur = con.cursor()
-    cur.execute('DELETE FROM staff where name = %s;', (message.from_user.username,))
-    con.commit()
-    con.close()
+    db_sess = db_session.create_session()
+    db_sess.query(Staff).filter(Staff.name == message.from_user.username).delete()
+    db_sess.commit()
     message.answer('Вы покинули компанию')
 
 
 if __name__ == '__main__':
+    set_default_commands(dp)
     executor.start_polling(dp, skip_updates=True)
