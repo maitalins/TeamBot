@@ -110,9 +110,10 @@ async def meetings(message):
     if not first_per is None:
         second_per = db_sess.query(Staff).filter(Staff.id_company == id_com_1).all()
         if len(second_per) > 0:
-            await message.answer('Секунду я подбираю ##########')
+            await message.answer('Секунду я подбираю вам нового знакомого :)')
             meets = db_sess.query(Meetings).filter(Meetings.id_first == id_com_1
                                                    | Meetings.id_second == id_com_1).all()
+            meets = ((i.id_first, i.id_second) for i in meets)
             meet_per = numpy.fromiter((i for i in second_per if (i, id_1) not in meets
                                        and (id_1, i) not in meets and id_1 != i), dtype=int, count=1)  # как проверять на вхождение
             if list(meet_per) is None:
