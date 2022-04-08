@@ -44,7 +44,8 @@ async def help(message):
 async def helphr(message):
     await message.answer('/createcompany - создать компанию и получить '
                          'токен для подключения к компании\n'
-                         '/newtoken - получить новый токен компании')
+                         '/newtoken - получить новый токен компании\n'
+                         '/delete_company - удаление компании')
 
 
 class CreateCompany(StatesGroup):
@@ -70,7 +71,8 @@ async def get_name_company(message, state: FSMContext):
                         token=token_company, hr=message.from_user.username))
     db_sess.commit()
     await state.finish()
-    await message.answer(f'Организация создана\nТокен для приглашения - {token_company}')
+    await message.answer("Организация создана\nТокен для приглашения")
+    await message.answer(token_company)
 
 
 class ConnectCompany(StatesGroup):
@@ -99,7 +101,8 @@ async def con_company(message, state: FSMContext):
         await message.reply("Компании с таким токеном не существует, попробуйте ещё раз")
         return
     await state.finish()
-    await message.answer(f'Вы подключились к компании - {req.name_company}')
+    await message.answer("Вы подключились к компании")
+    await message.answer(req.name_company)
 
 
 @dp.message_handler(commands="meet")
@@ -120,7 +123,8 @@ async def meetings(message):
                 meet_per = db_sess.query(Staff).filter(Staff.id == list(meet_per)[0]).first()
                 db_sess.add(Meetings(id_first=id_1, id_second=meet_per.id))
                 db_sess.commit()
-                await message.answer(f'Ваш новый знакомый - {meet_per.name}')
+                await message.answer("Ваш новый знакомый")
+                await message.answer(meet_per.name)
             else:
                 await message.answer('Вы уже познакомились со всеми')
         else:
@@ -134,15 +138,30 @@ async def start_state(message):
     company = db_sess.query(Company).filter(Company.hr == message.from_user.username).first()
     company.token = token_company
     db_sess.commit()
-    await message.answer(f'Токен обновлен - {token_company}')
+    await message.answer("Токен обновлен")
+    await message.answer(token_company)
 
 
 @dp.message_handler(commands=['exit_company'])
-def exit_company(message):
+async def exit_company(message):
     db_sess = db_session.create_session()
     db_sess.query(Staff).filter(Staff.name == message.from_user.username).delete()
     db_sess.commit()
-    message.answer('Вы покинули компанию')
+    await message.answer('Вы покинули компанию')
+
+
+@dp.message_handler(commands=['delete_company'])
+async def delete_company(message):
+    db_sess = db_session.create_session()
+    hr = db_sess.query(Company).filter(Company.hr == message.from_user.username).all()
+    if hr:
+        hr = hr[0].name_company
+        db_sess.query(Staff).filter(Staff.id_company == hr).delete()
+        db_sess.query(Company).filter(Company.name_company == hr).delete()
+        db_sess.commit()
+        await message.answer('Вы удалили свою компанию')
+    else:
+        await message.answer('У вас нету компаний')
 
 
 if __name__ == '__main__':
