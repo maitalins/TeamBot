@@ -87,13 +87,10 @@ async def start_state(message):
 
 @dp.message_handler(state=ConnectCompany.connect, content_types=types.ContentTypes.TEXT)
 async def con_company(message, state: FSMContext):
-    if any(map(str.isdigit, message.text)):
-        await message.reply("Некорректный токен, напишите еще раз")
-        return
     await state.update_data(connect=message.text.title())
     data = await state.get_data()
     db_sess = db_session.create_session()
-    req = db_sess.query(Company).filter(Company.token == data['connect']).first()
+    req = db_sess.query(Company).filter(Company.token.like(data['connect'])).first()
     if not req is None:
         db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
         db_sess.commit()
@@ -111,14 +108,15 @@ async def meetings(message):
     first_per = db_sess.query(Staff).filter(Staff.name == message.from_user.username).first()
     id_1, id_com_1 = first_per.id, first_per.id_company
     if not first_per is None:
-        second_per = db_sess.query(Staff).filter(Staff.id_company == id_com_1).all()
+        second_per = (() for i in db_sess.query(Staff).filter(Staff.id_company == id_com_1).all())
+        print(second_per)
         if len(second_per) > 0:
             await message.answer('Секунду я подбираю вам нового знакомого :)')
-            meets = db_sess.query(Meetings).filter(Meetings.id_first == id_com_1
-                                                   | Meetings.id_second == id_com_1).all()
+            print(db_sess.query(Meetings).filter().first())
+            meets = db_sess.query(Meetings).filter((Meetings.id_first == id_com_1) | (Meetings.id_second == id_com_1)).all()
             meets = ((i.id_first, i.id_second) for i in meets)
             meet_per = numpy.fromiter((i for i in second_per if (i, id_1) not in meets
-                                       and (id_1, i) not in meets and id_1 != i), dtype=int, count=1)  # как проверять на вхождение
+                                       and (id_1, i) not in meets and id_1 != i), dtype=int, count=1)
             if list(meet_per) is None:
                 meet_per = db_sess.query(Staff).filter(Staff.id == list(meet_per)[0]).first()
                 db_sess.add(Meetings(id_first=id_1, id_second=meet_per.id))
