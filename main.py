@@ -54,13 +54,17 @@ class CreateCompany(StatesGroup):
 
 @dp.message_handler(commands="createcompany", state="*")
 async def start_state(message):
-    await message.answer(text='Напишите название организации')
-    await CreateCompany.name_company.set()
-
+    db_sess = db_session.create_session()
+    req = db_sess.query(Company).filter(Company.hr.like(message.from_user.username)).first()
+    if not req:
+        await message.answer(text='Напишите название организации')
+        await CreateCompany.name_company.set()
+    else:
+        await message.answer('У вас есть уже компания')
 
 @dp.message_handler(state=CreateCompany.name_company, content_types=types.ContentTypes.TEXT)
 async def get_name_company(message, state: FSMContext):
-    if any(map(str.isdigit, message.text)):
+    if not any(map(str.isalnum, message.text)):
         await message.reply("Некорректное название, напишите еще раз")
         return
     await state.update_data(name_company=message.text.title())
@@ -92,8 +96,11 @@ async def con_company(message, state: FSMContext):
     db_sess = db_session.create_session()
     req = db_sess.query(Company).filter(Company.token.like(data['connect'])).first()
     if not req is None:
-        db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
-        db_sess.commit()
+        if message.from_user.username is None:
+            db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
+            db_sess.commit()
+        else:
+            await message.answer('У вас нету никнейма')
     else:
         await message.reply("Компании с таким токеном не существует, попробуйте ещё раз")
         return
