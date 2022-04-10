@@ -62,6 +62,7 @@ async def start_state(message):
     else:
         await message.answer('У вас есть уже компания')
 
+
 @dp.message_handler(state=CreateCompany.name_company, content_types=types.ContentTypes.TEXT)
 async def get_name_company(message, state: FSMContext):
     if not any(map(str.isalnum, message.text)):
