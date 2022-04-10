@@ -108,21 +108,23 @@ async def meetings(message):
     first_per = db_sess.query(Staff).filter(Staff.name == message.from_user.username).first()
     id_1, id_com_1 = first_per.id, first_per.id_company
     if not first_per is None:
-        second_per = (() for i in db_sess.query(Staff).filter(Staff.id_company == id_com_1).all())
-        print(second_per)
+        second_per = db_sess.query(Staff).filter(Staff.id_company == id_com_1).all()
         if len(second_per) > 0:
             await message.answer('Секунду я подбираю вам нового знакомого :)')
-            print(db_sess.query(Meetings).filter().first())
-            meets = db_sess.query(Meetings).filter((Meetings.id_first == id_com_1) | (Meetings.id_second == id_com_1)).all()
+            meets = db_sess.query(Meetings).filter((Meetings.id_first == id_1) | (Meetings.id_second == id_1)).all()
             meets = ((i.id_first, i.id_second) for i in meets)
-            meet_per = numpy.fromiter((i for i in second_per if (i, id_1) not in meets
-                                       and (id_1, i) not in meets and id_1 != i), dtype=int, count=1)
-            if list(meet_per) is None:
-                meet_per = db_sess.query(Staff).filter(Staff.id == list(meet_per)[0]).first()
-                db_sess.add(Meetings(id_first=id_1, id_second=meet_per.id))
+            print([i.id for i in second_per if (i.id, id_1) not in meets
+                                            and (id_1, i.id) not in meets and id_1 != i.id])
+            print((3, 2) in meets)  # почему то false когда должно быть True
+            meet_per = list(numpy.fromiter((i.id for i in second_per if (i.id, id_1) not in meets
+                                            and (id_1, i.id) not in meets and id_1 != i.id), dtype=int, count=1))  # здесь ошибк
+            print(meet_per)
+            if meet_per:
+                person = db_sess.query(Staff).filter(Staff.id == meet_per[0].item()).first()
+                db_sess.add(Meetings(id_first=id_1, id_second=person.id))
                 db_sess.commit()
                 await message.answer("Ваш новый знакомый")
-                await message.answer(meet_per.name)
+                await message.answer(f'@{person.name}')
             else:
                 await message.answer('Вы уже познакомились со всеми')
         else:
