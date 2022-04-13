@@ -95,48 +95,60 @@ async def con_company(message, state: FSMContext):
     await state.update_data(connect=message.text.title())
     data = await state.get_data()
     db_sess = db_session.create_session()
-    req = db_sess.query(Company).filter(Company.token.like(data['connect'])).first()
-    if not req is None:
-        if message.from_user.username is None:
-            db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
-            db_sess.commit()
+    hr = db_sess.query(Company).filter(Company.hr.not_like(message.from_user.username)).first()
+    if not hr is None:
+        req = db_sess.query(Company).filter(Company.token.like(data['connect'])).first()
+        if not req is None:
+            if not message.from_user.username is None:
+                db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
+                db_sess.commit()
+                await state.finish()
+                await message.answer("Вы подключились к компании")
+                await message.answer(req.name_company)
+            else:
+                await message.answer('У вас отсутствует никнейм')
         else:
-            await message.answer('У вас нету никнейма')
+            await message.reply("Компании с таким токеном не существует, попробуйте ещё раз")
+            return
     else:
-        await message.reply("Компании с таким токеном не существует, попробуйте ещё раз")
+        await message.answer('Вы управляете компанией')
         return
-    await state.finish()
-    await message.answer("Вы подключились к компании")
-    await message.answer(req.name_company)
 
 
 @dp.message_handler(commands="meet")
 async def meetings(message):
     db_sess = db_session.create_session()
-    first_per = db_sess.query(Staff).filter(Staff.name == message.from_user.username).first()
-    id_1, id_com_1 = first_per.id, first_per.id_company
-    if not first_per is None:
-        second_per = db_sess.query(Staff).filter(Staff.id_company == id_com_1).all()
-        if len(second_per) > 0:
-            await message.answer('Секунду я подбираю вам нового знакомого :)')
-            meets = db_sess.query(Meetings).filter((Meetings.id_first == id_1) | (Meetings.id_second == id_1)).all()
-            meets = ((i.id_first, i.id_second) for i in meets)
-            print([i.id for i in second_per if (i.id, id_1) not in meets
-                                            and (id_1, i.id) not in meets and id_1 != i.id])
-            print((3, 2) in meets)  # почему то false когда должно быть True
-            meet_per = list(numpy.fromiter((i.id for i in second_per if (i.id, id_1) not in meets
-                                            and (id_1, i.id) not in meets and id_1 != i.id), dtype=int, count=1))  # здесь ошибк
-            print(meet_per)
-            if meet_per:
-                person = db_sess.query(Staff).filter(Staff.id == meet_per[0].item()).first()
-                db_sess.add(Meetings(id_first=id_1, id_second=person.id))
-                db_sess.commit()
-                await message.answer("Ваш новый знакомый")
-                await message.answer(f'@{person.name}')
+    hr = db_sess.query(Company).filter(Company.hr.not_like(message.from_user.username)).first()
+    if not hr is None:
+        first_per = db_sess.query(Staff).filter(Staff.name.like(message.from_user.username)).first()
+        hr = db_sess.query(Company).filter(Company.hr.not_like(message.from_user.username)).first()
+        if not first_per is None:
+            id_1, id_com_1 = first_per.id, first_per.id_company
+            second_per = db_sess.query(Staff).filter(Staff.id_company == id_com_1).all()
+            if len(second_per) > 0:
+                await message.answer('Секунду я подбираю вам нового знакомого :)')
+                meets = db_sess.query(Meetings).filter((Meetings.id_first.like(id_1)) | (Meetings.id_second.like(id_1))).all()
+                meets = ((int(i.id_first), int(i.id_second)) for i in meets)
+                print([i.id for i in second_per if ((i.id, id_1) not in meets
+                                                and (id_1, i.id) not in meets) and id_1 != i.id])
+                print((2, 1) in meets)  # почему то false когда должно быть True
+                meet_per = list(numpy.fromiter((i.id for i in second_per if ((i.id, id_1) not in meets
+                                                and (id_1, i.id) not in meets) and id_1 != i.id), dtype=int, count=1))  # здесь ошибк
+                print(meet_per)
+                if meet_per:
+                    person = db_sess.query(Staff).filter(Staff.id == meet_per[0].item()).first()
+                    db_sess.add(Meetings(id_first=id_1, id_second=person.id))
+                    db_sess.commit()
+                    await message.answer("Ваш новый знакомый")
+                    await message.answer(f'@{person.name}')
+                else:
+                    await message.answer('Вы уже познакомились со всеми')
             else:
-                await message.answer('Вы уже познакомились со всеми')
+                await message.answer('В вашей компании нету сотрудников')
         else:
-            await message.answer('В вашей компании нету сотрудников')
+            await message.answer('Вы не состоите в компании')
+    else:
+        await message.answer('Вы hr, вам нельзя знакомиться :)')
 
 
 @dp.message_handler(commands="newtoken")
@@ -169,7 +181,7 @@ async def delete_company(message):
         db_sess.commit()
         await message.answer('Вы удалили свою компанию')
     else:
-        await message.answer('У вас нету компаний')
+        await message.answer('У вас отсутствует компания')
 
 
 if __name__ == '__main__':
