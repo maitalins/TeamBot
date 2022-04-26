@@ -1,4 +1,5 @@
 import logging
+from itertools import islice
 
 import numpy
 import secrets
@@ -28,6 +29,14 @@ async def set_default_commands(dp):
     ])
 
 
+async def check(message):
+    if not message.from_user.username is None:
+        pass
+    else:
+        await message.answer('У вас отсутствует никнейм')
+        return None
+
+
 @dp.message_handler(commands='start')
 async def start(message):
     await message.answer('Привет, меня зовут TeamBot и я помогу вам лучше узнать тех,'
@@ -54,6 +63,8 @@ class CreateCompany(StatesGroup):
 
 @dp.message_handler(commands="createcompany", state="*")
 async def start_state(message):
+    if await check(message) is None:
+        return
     db_sess = db_session.create_session()
     req = db_sess.query(Company).filter(Company.hr.like(message.from_user.username)).first()
     if not req:
@@ -86,12 +97,16 @@ class ConnectCompany(StatesGroup):
 
 @dp.message_handler(commands="connectcompany", state="*")
 async def start_state(message):
+    if await check(message) is None:
+        return
     await message.answer(text='Напишите токен компании для подключения к ней')
     await ConnectCompany.connect.set()
 
 
 @dp.message_handler(state=ConnectCompany.connect, content_types=types.ContentTypes.TEXT)
 async def con_company(message, state: FSMContext):
+    if await check(message) is None:
+        return
     await state.update_data(connect=message.text.title())
     data = await state.get_data()
     db_sess = db_session.create_session()
@@ -99,14 +114,11 @@ async def con_company(message, state: FSMContext):
     if not hr is None:
         req = db_sess.query(Company).filter(Company.token.like(data['connect'])).first()
         if not req is None:
-            if not message.from_user.username is None:
-                db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
-                db_sess.commit()
-                await state.finish()
-                await message.answer("Вы подключились к компании")
-                await message.answer(req.name_company)
-            else:
-                await message.answer('У вас отсутствует никнейм')
+            db_sess.add(Staff(name=message.from_user.username, id_company=req.id))
+            db_sess.commit()
+            await state.finish()
+            await message.answer("Вы подключились к компании")
+            await message.answer(req.name_company)
         else:
             await message.reply("Компании с таким токеном не существует, попробуйте ещё раз")
             return
@@ -117,6 +129,8 @@ async def con_company(message, state: FSMContext):
 
 @dp.message_handler(commands="meet")
 async def meetings(message):
+    if await check(message) is None:
+        return
     db_sess = db_session.create_session()
     hr = db_sess.query(Company).filter(Company.hr.not_like(message.from_user.username)).first()
     if not hr is None:
@@ -128,21 +142,20 @@ async def meetings(message):
             if len(second_per) > 0:
                 await message.answer('Секунду я подбираю вам нового знакомого :)')
                 meets = db_sess.query(Meetings).filter((Meetings.id_first.like(id_1)) | (Meetings.id_second.like(id_1))).all()
-                meets = ((int(i.id_first), int(i.id_second)) for i in meets)
-                print([i.id for i in second_per if ((i.id, id_1) not in meets
-                                                and (id_1, i.id) not in meets) and id_1 != i.id])
-                print((2, 1) in meets)  # почему то false когда должно быть True
-                meet_per = list(numpy.fromiter((i.id for i in second_per if ((i.id, id_1) not in meets
-                                                and (id_1, i.id) not in meets) and id_1 != i.id), dtype=int, count=1))  # здесь ошибк
-                print(meet_per)
-                if meet_per:
-                    person = db_sess.query(Staff).filter(Staff.id == meet_per[0].item()).first()
-                    db_sess.add(Meetings(id_first=id_1, id_second=person.id))
-                    db_sess.commit()
-                    await message.answer("Ваш новый знакомый")
-                    await message.answer(f'@{person.name}')
-                else:
-                    await message.answer('Вы уже познакомились со всеми')
+                meets = tuple((i.id_first, i.id_second) for i in meets)
+                try:
+                    meet_per = list(islice(filter(lambda x: (x.id, id_1) not in meets and (id_1, x.id)
+                                                                not in meets and id_1 != x.id, second_per), 1))
+                    if meet_per:
+                        person = db_sess.query(Staff).filter(Staff.id == meet_per[0].item()).first()
+                        db_sess.add(Meetings(id_first=id_1, id_second=person.id))
+                        db_sess.commit()
+                        await message.answer("Ваш новый знакомый")
+                        await message.answer(f'@{person.name}')
+                    else:
+                        await message.answer('Вы уже познакомились со всеми')
+                except Exception:
+                    await message.answer('Вы уже познакомились со всеми или в компании отсутствуют ваши коллеги')
             else:
                 await message.answer('В вашей компании нету сотрудников')
         else:
@@ -153,17 +166,24 @@ async def meetings(message):
 
 @dp.message_handler(commands="newtoken")
 async def start_state(message):
+    if await check(message) is None:
+        return
     db_sess = db_session.create_session()
     token_company = secrets.token_urlsafe(16)
     company = db_sess.query(Company).filter(Company.hr == message.from_user.username).first()
-    company.token = token_company
-    db_sess.commit()
-    await message.answer("Токен обновлен")
-    await message.answer(token_company)
+    if not company is None:
+        company.token = token_company
+        db_sess.commit()
+        await message.answer("Токен обновлен")
+        await message.answer(token_company)
+    else:
+        await message.answer('У вас нет компании')
 
 
 @dp.message_handler(commands=['exit_company'])
 async def exit_company(message):
+    if await check(message) is None:
+        return
     db_sess = db_session.create_session()
     db_sess.query(Staff).filter(Staff.name == message.from_user.username).delete()
     db_sess.commit()
