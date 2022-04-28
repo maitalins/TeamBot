@@ -1,13 +1,14 @@
 import logging
 from itertools import islice
 
-import numpy
 import secrets
 
+import requests as requests
 from aiogram import *
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
+from aiogram.dispatcher.filters import Text
 
 from data import db_session
 from data.company import Company
@@ -18,6 +19,28 @@ from secret import token
 bot = Bot(token=token)
 dp = Dispatcher(bot, storage=MemoryStorage())
 logging.basicConfig(level=logging.INFO)
+
+
+def cafe(coord, org):
+    search_api_server = "https://search-maps.yandex.ru/v1/"
+    api_key = "dda3ddba-c9ea-4ead-9010-f43fbc15c6e3"
+
+    address_ll = f"{coord[0]},{coord[1]}"
+
+    search_params = {
+        "apikey": api_key,
+        "text": f"{org}",
+        "lang": "ru_RU",
+        "ll": address_ll,
+        "type": "biz"
+    }
+
+    response = requests.get(search_api_server, params=search_params)
+    json_response = response.json()
+    organization = json_response["features"][0]
+    org_name = organization["properties"]["CompanyMetaData"]["name"]
+    org_address = organization["properties"]["CompanyMetaData"]["address"]
+    return f'{org_name} - {org_address}'
 
 
 async def set_default_commands(dp):
@@ -202,6 +225,43 @@ async def delete_company(message):
         await message.answer('Вы удалили свою компанию')
     else:
         await message.answer('У вас отсутствует компания')
+
+
+@dp.message_handler(commands="reference", state="*", content_types=types.ContentTypes.TEXT)
+async def coord_step(message, state: FSMContext):
+    if any(map(str.isdigit, message.text)):
+        await message.reply("Пожалуйста напишите адрес проблемы")
+        return
+    await state.update_data(coord_user=message.text.title())
+
+
+def get_keyboard():
+    keyboard = types.ReplyKeyboardMarkup()
+    button = types.KeyboardButton("Отправить геолокацию", request_location=True)
+    keyboard.add(button)
+    return keyboard
+
+
+class Ref(StatesGroup):
+    txt = State()
+
+
+@dp.message_handler(commands="ref", state="*")
+async def start_stat_step(message, state: FSMContext):
+    await message.answer(text='Прикрепите свою геопозицию', reply_markup=get_keyboard())
+    await Ref.txt.set()
+
+
+@dp.message_handler(state=Ref.txt, content_types=['location'])
+async def coord_step(message: types.Message, state: FSMContext):
+    lat = message.location.latitude
+    lon = message.location.longitude
+    coord = lon, lat
+    remove_buttons = types.ReplyKeyboardRemove()
+    await message.answer(cafe(coord, "кафе"), reply_markup=remove_buttons)
+    await message.answer(cafe(coord, "ресторан"))
+    await message.answer(cafe(coord, "кофейня"))
+    await state.finish()
 
 
 if __name__ == '__main__':
