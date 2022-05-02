@@ -69,7 +69,8 @@ async def start(message):
 @dp.message_handler(commands='help')
 async def help(message):
     await message.answer('/connectcompany - подключиться к компании\n'
-                         '/meet - создать встречу')
+                         '/meet - создать встречу\n'
+                         '/ref - места, где можно покушать')
 
 
 @dp.message_handler(commands='helphr')
@@ -86,8 +87,6 @@ class CreateCompany(StatesGroup):
 
 @dp.message_handler(commands="createcompany", state="*")
 async def start_state(message):
-    if await check(message) is None:
-        return
     db_sess = db_session.create_session()
     req = db_sess.query(Company).filter(Company.hr.like(message.from_user.username)).first()
     if not req:
@@ -120,16 +119,12 @@ class ConnectCompany(StatesGroup):
 
 @dp.message_handler(commands="connectcompany", state="*")
 async def start_state(message):
-    if await check(message) is None:
-        return
     await message.answer(text='Напишите токен компании для подключения к ней')
     await ConnectCompany.connect.set()
 
 
 @dp.message_handler(state=ConnectCompany.connect, content_types=types.ContentTypes.TEXT)
 async def con_company(message, state: FSMContext):
-    if await check(message) is None:
-        return
     await state.update_data(connect=message.text.title())
     data = await state.get_data()
     db_sess = db_session.create_session()
@@ -152,8 +147,6 @@ async def con_company(message, state: FSMContext):
 
 @dp.message_handler(commands="meet")
 async def meetings(message):
-    if await check(message) is None:
-        return
     db_sess = db_session.create_session()
     hr = db_sess.query(Company).filter(Company.hr.not_like(message.from_user.username)).first()
     if not hr is None:
@@ -167,17 +160,17 @@ async def meetings(message):
                 meets = db_sess.query(Meetings).filter((Meetings.id_first.like(id_1)) | (Meetings.id_second.like(id_1))).all()
                 meets = tuple((i.id_first, i.id_second) for i in meets)
                 try:
-                    meet_per = list(islice(filter(lambda x: (x.id, id_1) not in meets and (id_1, x.id)
-                                                                not in meets and id_1 != x.id, second_per), 1))
+                    meet_per = tuple(filter(lambda x: (x.id, id_1) not in meets and (id_1, x.id)
+                                                                not in meets and id_1 != x.id, second_per))
                     if meet_per:
-                        person = db_sess.query(Staff).filter(Staff.id == meet_per[0].item()).first()
+                        person = db_sess.query(Staff).filter(Staff.id == meet_per[0].id).first()
                         db_sess.add(Meetings(id_first=id_1, id_second=person.id))
                         db_sess.commit()
                         await message.answer("Ваш новый знакомый")
                         await message.answer(f'@{person.name}')
                     else:
                         await message.answer('Вы уже познакомились со всеми')
-                except Exception:
+                except Exception as e:
                     await message.answer('Вы уже познакомились со всеми или в компании отсутствуют ваши коллеги')
             else:
                 await message.answer('В вашей компании нету сотрудников')
@@ -189,8 +182,6 @@ async def meetings(message):
 
 @dp.message_handler(commands="newtoken")
 async def start_state(message):
-    if await check(message) is None:
-        return
     db_sess = db_session.create_session()
     token_company = secrets.token_urlsafe(16)
     company = db_sess.query(Company).filter(Company.hr == message.from_user.username).first()
@@ -205,8 +196,6 @@ async def start_state(message):
 
 @dp.message_handler(commands=['exit_company'])
 async def exit_company(message):
-    if await check(message) is None:
-        return
     db_sess = db_session.create_session()
     db_sess.query(Staff).filter(Staff.name == message.from_user.username).delete()
     db_sess.commit()
