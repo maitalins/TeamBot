@@ -253,6 +253,16 @@ async def coord_step(message: types.Message, state: FSMContext):
     await state.finish()
 
 
+@dp.message_handler(content_types=['text'])
+async def neop(message):
+    if message.text.lower() == 'помощь':
+        await message.answer('/connectcompany - подключиться к компании\n'
+                             '/meet - создать встречу\n'
+                             '/ref - места, где можно покушать')
+    else:
+        await message.answer('Я пока не могу отвечать на обычные сообщения напишите /help')
+
+
 if __name__ == '__main__':
     db_session.global_init("db/teambot.db")
     executor.start_polling(dp, skip_updates=True)
