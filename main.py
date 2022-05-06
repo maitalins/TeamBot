@@ -259,6 +259,14 @@ async def neop(message):
         await message.answer('/connectcompany - подключиться к компании\n'
                              '/meet - создать встречу\n'
                              '/ref - места, где можно покушать')
+    elif message.text.lower() == 'хочу поесть':
+        await message.answer('/ref - места, где можно покушать')
+    elif message.text.lower() == 'хочу покушать':
+        await message.answer('/ref - места, где можно покушать')
+    elif 'а как создать компанию' in message.text.lower():
+        await message.answer('/connectcompany - подключиться к компании')
+    elif 'а если я hr, что мне делать' in message.text.lower():
+        await message.answer('Используйте /helphr')
     else:
         await message.answer('Я пока не могу отвечать на обычные сообщения напишите /help')
 
