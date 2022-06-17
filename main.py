@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 
 def cafe(coord, org):
     search_api_server = "https://search-maps.yandex.ru/v1/"
-    api_key = "dda3ddba-c9ea-4ead-9010-f43fbc15c6e3"
+    api_key = "api"
 
     address_ll = f"{coord[0]},{coord[1]}"
 
